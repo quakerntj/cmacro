@@ -4,6 +4,8 @@
 #include <string.h>
 #include "bison.hpp"
 
+#define DD(args...) printf(args)
+
 extern int yylex(void);
 extern void yyerror(char *);
 
@@ -11,17 +13,43 @@ char * gText;
 double gFloat;
 int gInteger;
 bool gBool;
+bool gEnableSpace = false;
+bool gEnableNewline = false;
+extern int yylineno;
+extern char * yytext;
+const char * gcondition;
+void yyerror(const char *message)
+{
+  fprintf(stderr, "%d: error: '%s' at '%s' in condition %s\n", yylineno, message, yytext, gcondition);
+}
+
+typedef struct buffer_type {
+    unsigned lineno;
+    unsigned token;
+    char *data;
+} buffer_type;
 
 %}
 
 %union
 {
-    int i;
-    char * s;
-    char c;
+    unsigned lineno;
+    unsigned token;
+    char *data;
 }
 
-%token PREPROCESSOR_SYMBOL PRE_IF PRE_DEFINE FLOAT INTEGER BOOL
+%token PRE_IF PRE_ELSE PRE_ELIF PRE_IFDEF PRE_IFNDEF PRE_ENDIF 
+%token PRE_INCLUDE PRE_PRAGMA PRE_DEFINE PRE_DEFINED PRE_IDENTIFIER IDENTIFIER
+%token FLOAT INTEGER BOOL
+%token NEWLINE SEPERATE_SPACE
+
+%right "++" "--"
+
+%left '+' '-'
+%left '*' '/'
+%left '<' '>' ">=" "<=" "==" "!="
+
+%type<s> PRE_IDENTIFIER IDENTIFIER
 
 %{
     void yyerror(char *);
@@ -63,6 +91,7 @@ bool gBool;
         }
         args->clear();
     }
+
     void dumpArgs(std::vector<FuncArg*> * args_) {
         if (!args_) {
             printf("(NULL)");
@@ -94,23 +123,179 @@ bool gBool;
 %%
 
 program:
-    program Preprocessor
+    program Statement
     |
     ;
 
-Preprocessor:
+Statement:
+    StatementOne
+    | StatementOne StatementOne
+    ;
+
+StatementOne:
     PreStatement
+    | NEWLINE
+    | Expr
     ;
 
 PreStatement:
-    PRE_IF PreExpr { printf("if expr\n"); }
+    PreIfDirective { DD("PreStatement 1\n"); }
+    | PreDefineDirective { DD("PreStatement 2\n"); }
+    ;
+
+/* #if else elif endif */
+
+PreIfDirective:
+    PreIfExpendDirective PreEndifLine { DD("PreIfDirective 1\n"); }
+    | PreIfExpendDirective PreElseStatement PreEndifLine { DD("PreIfDirective 2\n"); }
+    ;
+
+PreIfExpendDirective:
+    PreIfElifDirective { DD("PreIfExpendDirective 1\n"); }
+    | PreIfExpendDirective PreElifStatement { DD("PreIfExpendDirective 2\n"); }
+    ;
+
+PreIfElifDirective:
+    PreIfStatement { DD("PreIfElifDirective\n"); }
+    | PreIfStatement PreElifStatement { DD("PreIfElifDirective\n"); }
+    | PreIfdefStatement { DD("PreIfElifDirective\n"); }
+    | PreIfdefStatement PreElifStatement { DD("PreIfElifDirective\n"); }
+    ;
+
+PreIfStatement:
+    PreIfLine { DD("PreIfStatement 1 \n"); }
+    | PreIfLine Statement { DD("PreIfStatement 2\n"); }
+    ;
+
+PreIfLine:
+    PreIfCheckSpace PreExpr NEWLINE { DD("PreIfLine\n");}
+    ;
+
+PreIfCheckSpace:
+    PreIfStart SEPERATE_SPACE {DD("PreIfCheckSpace\n"); gEnableSpace = false;}
+    ;
+
+PreIfStart:
+    PRE_IF {gEnableSpace = true;}
+    ;
+
+PreElseStatement:
+    PreElseLine { DD("PreElseStatement 1 \n"); }
+    | PreElseLine Statement { DD("PreElseStatement 2 \n"); }
+    ;
+
+/* #else */
+PreElseLine:
+    PRE_ELSE NEWLINE
+    ;
+
+/* #elif */
+PreElifStatement:
+    PreElifLine { DD("PreElifStatement 1 \n"); }
+    | PreElifLine Statement { DD("PreElifStatement 2 \n"); }
+    ;
+
+PreElifLine:
+    PreElifCheckSpace PreExpr { DD("PreElifLine\n"); }
+    ;
+
+PreElifCheckSpace:
+    PreElifStart SEPERATE_SPACE {DD("PreElifCheckSpace\n"); gEnableSpace = false;}
+    ;
+
+PreElifStart:
+    PRE_ELIF {gEnableSpace = true;}
+    ;
+    
+/* #ifdef ifndef */
+PreIfdefStatement:
+    PreIfdefLine { DD("PreIfdefStatement 1 \n"); }
+    | PreIfdefLine Statement { DD("PreIfdefStatement 2 \n"); }
+    | PreIfndefLine { DD("PreIfndefStatement 1 \n"); }
+    | PreIfndefLine Statement { DD("PreIfndefStatement 2 \n"); }
+    ;
+
+PreIfdefLine:
+    PreIfdefCheckSpace PRE_IDENTIFIER NEWLINE { DD("PreIfdefLine\n"); }
+    ;
+
+PreIfdefCheckSpace:
+    PreIfdefStart SEPERATE_SPACE {DD("PreIfdefCheckSpace\n"); gEnableSpace = false;}
+    ;
+
+PreIfdefStart:
+    PRE_IFDEF {gEnableSpace = true;}
+    ;
+    
+PreIfndefLine:
+    PreIfndefCheckSpace PRE_IDENTIFIER NEWLINE { DD("PreIfndefLine\n"); }
+    ;
+
+PreIfndefCheckSpace:
+    PreIfndefStart SEPERATE_SPACE {DD("PreIfndefCheckSpace\n"); gEnableSpace = false;}
+    ;
+
+PreIfndefStart:
+    PRE_IFNDEF {gEnableSpace = true;}
+    ;
+    
+/* #endif */
+PreEndifLine:
+    PRE_ENDIF NEWLINE
+    ;
+
+/* #define defined */
+PreDefineDirective:
+    PreDefineCheckIdentifier NEWLINE {DD("define 0\n");}
+    | PreDefineCheckIdentifier PreInStatement NEWLINE {DD("define 1\n");}
+    | PreDefineCheckIdentifier '(' PreArgumentExpr ')' PreInStatement NEWLINE {DD("define 2\n");}
+    ;
+
+PreDefineCheckIdentifier:
+    PreDefineCheckSpace PRE_IDENTIFIER {}
+    ;
+
+PreDefineCheckSpace:
+    PreDefineBegin SEPERATE_SPACE {gEnableSpace = false; }
+    ;
+
+PreDefineBegin:
+    PRE_DEFINE {gEnableSpace = true;}
+    ;
+
+PreArgumentExpr:
+    PRE_IDENTIFIER
+    | PreArgumentExpr ',' PRE_IDENTIFIER
+    ;
+
+/* Macro */
+PreInStatement:
+    IDENTIFIER
+    | PRE_IDENTIFIER
     ;
 
 PreExpr:
-    INTEGER {printf("I%d\n", gInteger); }
-    | FLOAT {printf("F%f\n", gFloat); }
-    | BOOL {printf("B%s\n", gBool ? "true" : "false"); }
-    |
+    INTEGER {DD("I%d\n", gInteger); }
+    | PRE_IDENTIFIER
+    | FLOAT {DD("F%f\n", gFloat); /* should error */}
+    | BOOL {DD("B%s\n", gBool ? "true" : "false");}
+    | '(' PreExpr ')'
+    | PreExpr '+' PreExpr
+    | PreExpr '-' PreExpr
+    | PreExpr '*' PreExpr
+    | PreExpr '/' PreExpr
+    ;
+
+Expr:
+    INTEGER {DD("I%d\n", gInteger); }
+    | IDENTIFIER
+    | FLOAT {DD("F%f\n", gFloat); /* should error */}
+    | BOOL {DD("B%s\n", gBool ? "true" : "false");}
+    | '(' PreExpr ')'
+    | Expr '+' Expr
+    | Expr '-' Expr
+    | Expr '*' Expr
+    | Expr '/' Expr
     ;
 
 %%
@@ -121,18 +306,6 @@ void yyerror(char *s) {
 
 void usage() {
     printf(
-"=================================================\n"
-"Register: a-f (struct) g-l (integer)\n"
-"Instruction: echo(register [,register])\n"
-"Primitive Types: integer, string, struct\n"
-"Comment: comment after '#'\n"
-"Example:\n"
-"\t#g will equal to h\n"
-"\tg=0; h=1; g=h;\n"
-"\t#a will be clean as null after assign to b\n"
-"\ta=(1,2,\"foo\"); b=a; c=(b,g);\n"
-"\techo(a,b,g,h);\n"
-"=================================================\n"
 "\n");
 }
 
