@@ -1,5 +1,6 @@
 %{
 #include <stdlib.h>
+#include "ATS.h"
 #include "bison.hpp"
 void yyerror(char *);
 
@@ -12,6 +13,7 @@ extern const char * gcondition;
 
 #define SET_BUFFER(t) \
     do { \
+        yylval.buffer.type = 0; \
         yylval.buffer.lineno = yylineno; \
         yylval.buffer.token = (t); \
         yylval.buffer.data = strdup(yytext); \
@@ -20,8 +22,6 @@ extern const char * gcondition;
 %}
 
 %s PREPROCESSOR
-
-seperatespace  ([ \t]+)
 
 whitespace  ([ \t\n\r]+)
 idenetifier [a-zA-Z_][a-zA-Z_0-9]*
@@ -32,7 +32,8 @@ idenetifier [a-zA-Z_][a-zA-Z_0-9]*
 ^{whitespace}*# {
     /* preprocessor begin */
     BEGIN(PREPROCESSOR);
-    gcondition = "preprocessor"; 
+    gcondition = "preprocessor";
+    printf("\npreprocessor+\n");
 }
 
 <PREPROCESSOR>if {
@@ -75,36 +76,30 @@ idenetifier [a-zA-Z_][a-zA-Z_0-9]*
     return PRE_PRAGMA;
 }
 
-<INITIAL,PREPROCESSOR>[-+]?([0-9]\+\.|\.[0-9]+|[0-9]+\.[0-9]+) {
+<INITIAL,PREPROCESSOR>([0-9]\+\.|\.[0-9]+|[0-9]+\.[0-9]+) {
     gFloat = atof(yytext);
     return FLOAT;
 }
 
-<INITIAL,PREPROCESSOR>[-+]?[0-9]+ {
-    gInteger = atoi(yytext);
+<INITIAL,PREPROCESSOR>[0-9]+ {
+    SET_BUFFER(INTEGER);
     return INTEGER;
 }
 
 <INITIAL,PREPROCESSOR>true {
-    gBool = true;
+    SET_BUFFER(INTEGER);
     return BOOL;
 }
 
 <INITIAL,PREPROCESSOR>false {
-    gBool = false;
+    SET_BUFFER(INTEGER);
     return BOOL;
 }
-
-<INITIAL,PREPROCESSOR>{seperatespace} {
-    if (gEnableSpace)
-        return SEPERATE_SPACE;
-}
-
 
 <PREPROCESSOR>\n {BEGIN(INITIAL); gcondition = "initial"; return NEWLINE;}
 <PREPROCESSOR>\\\\n ;  // change line
 
-<PREPROCESSOR>{idenetifier} {return PRE_IDENTIFIER;}
+<PREPROCESSOR>{idenetifier} {SET_BUFFER(PRE_IDENTIFIER); return PRE_IDENTIFIER;}
 <INITIAL>{idenetifier} {return IDENTIFIER;}
 
     /* skip whitespace */
@@ -116,6 +111,41 @@ idenetifier [a-zA-Z_][a-zA-Z_0-9]*
 <INITIAL,PREPROCESSOR>\) {return ')';}
 <INITIAL,PREPROCESSOR>\{ {return '{';}
 <INITIAL,PREPROCESSOR>\} {return '}';}
+
+<INITIAL,PREPROCESSOR>\+ {return '+';}
+<INITIAL,PREPROCESSOR>\- {return '-';}
+<INITIAL,PREPROCESSOR>\* {return '*';}
+<INITIAL,PREPROCESSOR>\/ {return '/';}
+
+<INITIAL,PREPROCESSOR>== {
+    SET_BUFFER(EQUAL);
+    return EQUAL;
+}
+
+<INITIAL,PREPROCESSOR>\!= {
+    SET_BUFFER(NOTEQUAL);
+    return NOTEQUAL;
+}
+
+<INITIAL,PREPROCESSOR>\>= {
+    SET_BUFFER(GREATEREQUAL);
+    return GREATEREQUAL;
+}
+
+<INITIAL,PREPROCESSOR>\<= {
+    SET_BUFFER(LESSEQUAL);
+    return LESSEQUAL;
+}
+
+<INITIAL,PREPROCESSOR>\> {
+    SET_BUFFER(GREATER);
+    return GREATER;
+}
+
+<INITIAL,PREPROCESSOR>\< {
+    SET_BUFFER(LESS);
+    return LESS;
+}
 
     /* anything else is ignored */
 . ;
