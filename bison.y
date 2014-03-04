@@ -27,16 +27,18 @@ void yyerror(const char *message)
 %}
 
 %token PRE_IF PRE_ELSE PRE_ELIF PRE_IFDEF PRE_IFNDEF PRE_ENDIF 
-%token PRE_INCLUDE PRE_PRAGMA PRE_DEFINE PRE_DEFINED PRE_IDENTIFIER IDENTIFIER
+%token PRE_INCLUDE PRE_PRAGMA PRE_DEFINE PRE_DEFINED PRE_IDENTIFIER PRE_IDENTIFIER_FUNC
+%token IDENTIFIER
 %token FLOAT INTEGER BOOL
 %token EQUAL NOTEQUAL GREATEREQUAL LESSEQUAL GREATER LESS
 %token NEWLINE SEPERATE_SPACE
 
-%right "++" "--"
 
+%left EQUAL NOTEQUAL
+%left GREATEREQUAL LESSEQUAL GREATER LESS
+%left '*' '/' '%'
 %left '+' '-'
-%left '*' '/'
-%left '<' '>' ">=" "<=" "==" "!="
+%right "++" "--"
 
 %{
 void yyerror(char *);
@@ -116,14 +118,9 @@ program:
     ;
 
 Statement:
-    StatementOne
-    | StatementOne StatementOne
-    ;
-
-StatementOne:
     PreStatement
     | NEWLINE
-//    | Expr
+    | Expr
     ;
 
 PreStatement:
@@ -134,20 +131,14 @@ PreStatement:
 /* #if else elif endif */
 
 PreIfDirective:
-    PreIfExpendDirective PreEndifLine { DD("PreIfDirective 1\n"); }
-    | PreIfExpendDirective PreElseStatement PreEndifLine { DD("PreIfDirective 2\n"); }
-    ;
-
-PreIfExpendDirective:
-    PreIfElifDirective { DD("PreIfExpendDirective 1\n"); }
-    | PreIfExpendDirective PreElifStatement { DD("PreIfExpendDirective 2\n"); }
+    PreIfElifDirective PreEndifLine { DD("PreIfDirective 1\n"); }
+    | PreIfElifDirective PreElseStatement PreEndifLine { DD("PreIfDirective 2\n"); }
     ;
 
 PreIfElifDirective:
     PreIfStatement { DD("PreIfElifDirective\n"); }
-    | PreIfStatement PreElifStatement { DD("PreIfElifDirective\n"); }
     | PreIfdefStatement { DD("PreIfElifDirective\n"); }
-    | PreIfdefStatement PreElifStatement { DD("PreIfElifDirective\n"); }
+    | PreIfElifDirective PreElifStatement { DD("PreIfElifDirective\n"); }
     ;
 
 PreIfStatement:
@@ -210,28 +201,22 @@ PreEndifLine:
 
 /* #define defined */
 PreDefineDirective:
-    PreDefineCheckIdentifier NEWLINE {
+    PRE_DEFINE PreIdentifier NEWLINE {
         DD("define 0\n");
-        MacroVariableExprAST * ast = gPM->getIdAstFromLexerType<MacroVariableExprAST>($$, $1);
+        MacroVariableExprAST * ast = gPM->getIdAstFromLexerType<MacroVariableExprAST>($$, $2);
         ast->setValue(0);
         DD("define 0\n");
     }
-    | PreDefineCheckIdentifier PreInStatement NEWLINE {
+    | PRE_DEFINE PreIdentifier PreInStatement NEWLINE {
         DD("define 1\n");
-        MacroVariableExprAST * ast = gPM->getIdAstFromLexerType<MacroVariableExprAST>($$, $1);
-        if ($2.type.type == 1) {
-            ast->setExpr($2.holder);
+        MacroVariableExprAST * ast = gPM->getIdAstFromLexerType<MacroVariableExprAST>($$, $2);
+        if ($3.type.type == 1) {
+            ast->setExpr($3.holder);
             DD("define 1.1\n");
         } else
             ;
     }
-    | PreDefineCheckIdentifier '(' PreArgumentExpr ')' PreInStatement NEWLINE {DD("define 2\n");}
-    ;
-
-PreDefineCheckIdentifier:
-    PRE_DEFINE PreIdentifier {
-        $$ = $2;
-    }
+    | PRE_DEFINE PRE_IDENTIFIER_FUNC PreArgumentExpr ')' PreInStatement NEWLINE {DD("define 2\n");}
     ;
 
 PreArgumentExpr:
@@ -242,7 +227,6 @@ PreArgumentExpr:
 /* Macro */
 PreInStatement:
     IDENTIFIER
-    | PreIdentifier
     | PreExpr
     ;
 
@@ -323,17 +307,17 @@ PreExpr:
     }
     ;
 
-//Expr:
-//    INTEGER {DD("I%d\n", gInteger); }
-//    | IDENTIFIER
-//    | FLOAT {DD("F%f\n", gFloat); /* should error */}
-//    | BOOL {DD("B%s\n", gBool ? "true" : "false");}
-//    | '(' Expr ')'
-//    | Expr '+' Expr
-//    | Expr '-' Expr
-//    | Expr '*' Expr
-//    | Expr '/' Expr
-//    ;
+Expr:
+    INTEGER {DD("I%d\n", gInteger); }
+    | IDENTIFIER
+    | FLOAT {DD("F%f\n", gFloat); /* should error */}
+    | BOOL {DD("B%s\n", gBool ? "true" : "false");}
+    | '(' Expr ')'
+    | Expr '+' Expr
+    | Expr '-' Expr
+    | Expr '*' Expr
+    | Expr '/' Expr
+    ;
 
 %%
 

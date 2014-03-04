@@ -99,6 +99,7 @@ idenetifier [a-zA-Z_][a-zA-Z_0-9]*
 <PREPROCESSOR>\n {BEGIN(INITIAL); gcondition = "initial"; return NEWLINE;}
 <PREPROCESSOR>\\\\n ;  // change line
 
+<PREPROCESSOR>{idenetifier}\( {SET_BUFFER(PRE_IDENTIFIER_FUNC); return PRE_IDENTIFIER_FUNC;}
 <PREPROCESSOR>{idenetifier} {SET_BUFFER(PRE_IDENTIFIER); return PRE_IDENTIFIER;}
 <INITIAL>{idenetifier} {return IDENTIFIER;}
 

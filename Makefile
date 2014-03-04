@@ -4,7 +4,7 @@ clean:
 	rm bison.hpp bison.cpp parser lex.cpp
 
 bison.cpp: bison.y
-	/usr/bin/bison -d -o $@ $^
+	/usr/bin/bison --report=state -d -o $@ $^
 
 lex.cpp: lex.l
 	flex -o $@ $^
